@@ -4,12 +4,14 @@ import (
 	"YT-Spotify-Favourite-Sync/spotify"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"strconv"
+	"strings"
 )
 
 type config struct {
@@ -37,25 +39,37 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to load config:\n" + err.Error())
 	}
+	var spc *spotify.Client
 
+	state := rand.Int()
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
-		state := rand.Int()
 		sendBody := fmt.Sprintf("response_type=code&client_id=%v&scope=playlist-modify-private,playlist-read-private&redirect_uri=http://localhost:8866/spotify&state=%v", c.Spc.Id, state)
 		sendBody = url.PathEscape(sendBody)
 		http.Redirect(writer, request, "https://accounts.spotify.com/authorize?"+sendBody, http.StatusSeeOther)
 	})
 
 	http.HandleFunc("/spotify", func(writer http.ResponseWriter, request *http.Request) {
-		fmt.Println(io.ReadAll(request.Body))
-		//TODO
+		x := strings.Split(strings.SplitAfterN(request.RequestURI, "=", 2)[1], "&")
+		authToken := x[0]
+		state2 := strings.Split(x[1], "=")[1]
+		if strconv.Itoa(state) != state2 {
+			log.Fatalf("SPOTIFY: Request has been tampered with by a third party\nstate expected: %v\nfound: %v\naborting!", state, state2)
+		}
+
+		spc = spotify.NewClient(c.Spc, authToken)
 	})
 
-	err = http.ListenAndServe(":8866", nil)
-	if err != nil {
-		return
+	go func() {
+		_ = exec.Command("xdg-open", "http://localhost:8866/").Start()
+		err = http.ListenAndServe(":8866", nil)
+		if err != nil {
+			return
+		}
+	}()
+
+	for spc == nil {
 	}
 
-	spc := spotify.NewClient(c.Spc, "rt")
 	for _, track := range spc.FindPlayListTracks() {
 		fmt.Println(track)
 	}
