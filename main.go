@@ -43,7 +43,7 @@ func main() {
 
 	state := rand.Int()
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
-		sendBody := fmt.Sprintf("response_type=code&client_id=%v&scope=playlist-modify-private,playlist-read-private&redirect_uri=http://localhost:8866/spotify&state=%v", c.Spc.Id, state)
+		sendBody := fmt.Sprintf("response_type=code&client_id=%v&scope=user-library-read,user-library-modify&redirect_uri=http://localhost:8866/spotify&state=%v", c.Spc.Id, state)
 		sendBody = url.PathEscape(sendBody)
 		http.Redirect(writer, request, "https://accounts.spotify.com/authorize?"+sendBody, http.StatusSeeOther)
 	})
@@ -70,7 +70,8 @@ func main() {
 	for spc == nil {
 	}
 
-	for _, track := range spc.FindPlayListTracks() {
+	tracks := spc.FindSavedTracks()
+	for _, track := range tracks {
 		fmt.Println(track)
 	}
 }

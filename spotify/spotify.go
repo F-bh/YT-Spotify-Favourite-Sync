@@ -122,19 +122,30 @@ func (c *Client) refreshAccess(expiresIn int, refreshToken string) {
 	c.refreshAccess(parsed.Expires_in, parsed.Refresh_token)
 }
 
-func (c *Client) FindPlayListTracks() []string {
+type myTracksResp struct {
+	Next  string
+	Items []myTracksRespItem
+}
 
+type myTracksRespItem struct {
+	AddedAt string
+	Track   struct {
+		Name string
+	}
+}
+
+func (c *Client) doFind(url string, out *[]myTracksRespItem) {
 	// find playlist
-	request, err := http.NewRequest(http.MethodGet, BaseUrl+"me/playlists?limit=50&offset=0", nil)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		log.Fatal("SPOTIFY:" + err.Error())
 	}
 
 	c.token.Lock()
-	defer c.token.Unlock()
 	request.Header.Add("Authorization", "Bearer "+c.token.value)
 
 	response, err := http.DefaultClient.Do(request)
+	c.token.Unlock()
 	if err != nil {
 		log.Fatal("SPOTIFY:" + err.Error())
 	}
@@ -148,63 +159,21 @@ func (c *Client) FindPlayListTracks() []string {
 		log.Fatalf("SPOTIFY: failed to get playlists\nStatus:" + response.Status + "\nbody:" + string(body))
 	}
 
-	m := struct {
-		Items []struct {
-			Name   string
-			Id     string
-			Tracks struct {
-				Href  string
-				Total int
-			}
-		}
-	}{}
-
+	var m myTracksResp
 	err = json.Unmarshal(body, &m)
 	if err != nil {
 		log.Fatal("SPOTIFY:" + err.Error())
 	}
 
-	// find tracks
-	playListHref := ""
-	for _, item := range m.Items {
-		if item.Name == c.cfg.PlayListName {
-			playListHref = item.Tracks.Href
-			break
-		}
+	*out = append(*out, m.Items...)
+
+	if m.Next != "" {
+		c.doFind(m.Next, out)
 	}
+}
 
-	if playListHref == "" {
-		log.Fatal("SPOTIFY: failed to get href to tracks\n body:" + string(body))
-	}
-
-	var tracks []string
-
-	for playListHref != "" {
-		request, err = http.NewRequest(http.MethodGet, playListHref, nil)
-		if err != nil {
-			log.Fatal("SPOTIFY:" + err.Error())
-		}
-		request.Header.Add("Authorization", "Bearer "+c.token.value)
-
-		n := struct {
-			Next  string
-			Items []struct {
-				Name string
-				Id   string
-			}
-		}{}
-
-		err = json.Unmarshal(body, &n)
-		if err != nil {
-			log.Fatal("SPOTIFY:" + err.Error())
-		}
-
-		for _, i := range n.Items {
-			tracks = append(tracks, i.Name)
-		}
-
-		playListHref = n.Next
-	}
-
+func (c *Client) FindSavedTracks() []myTracksRespItem {
+	var tracks []myTracksRespItem
+	c.doFind(BaseUrl+"me/tracks?limit=50&offset=0", &tracks)
 	return tracks
 }
