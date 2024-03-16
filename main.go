@@ -70,8 +70,13 @@ func main() {
 	for spc == nil {
 	}
 
-	tracks := spc.FindSavedTracks()
+	tracks := spc.FindSavedSongs()
 	for _, track := range tracks {
-		fmt.Println(track)
+		song := spc.FindSongSPId(track)
+		if track.SPId != song.SPId {
+			fmt.Printf("expected:\n%+v\nfound:\n%+v", track, song)
+		}
+
+		fmt.Println()
 	}
 }
